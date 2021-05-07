@@ -1,0 +1,5 @@
+These MAGMA files accompany Part 2 of the article "Quantitative arithmetic of diagonal degree 2 K3 surfaces" (arxiv:1910.06257).
+The two main files that can be executed are:
+- main3.magma, verifying the transcendental 3-torsion in Theorem 8.17
+- main2.magma, verifying the transcendental 2-torsion in Theorem 8.18
+The computation is faster if one only iterates over the nontrivial cases as precomputed in nontrivial2.magma and nontrivial3.magma.

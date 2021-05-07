@@ -1,0 +1,13 @@
+twists6 := AssociativeArray();
+twists6[{3,1,1,1}] := 0;
+twists6[{5,5,5,3}] := 0;
+twists6[{5,3,3,1}] := 0;
+twists6[{5,3,2,2}] := 1;
+twists6[{4,4,3,1}] := -1;
+twists6[{4,3,3,2}] := 3;
+twists6[{3,3,3,3}] := 0;
+
+
+
+
+

@@ -1,0 +1,144 @@
+//coefficient module of cohomology module CM independent of whether CM is free or abelian group
+MyModule := function(CM)
+    if CM`modtype eq ModGrp then
+        return RSpace(Ring(CM),Dimension(CM));
+    else
+        return RSpace(Z,Invariants(CM));
+    end if;
+end function;
+
+// restrict a G-module Mod along h:H->G
+RestrictGModule := function(Mod,h,H)
+    if Type(H) ne GrpPC then
+        return GModule(H,[Representation(Mod)(h(H.j)): j in [1..Ngens(H)]]);
+    else
+        return GModule(H,[Representation(Mod)(h(H.j)): j in [1..NPCgens(H)]]);
+    end if;
+end function;
+
+// factor a G-module Mod along h:G->H, assuming the action factors
+FactorGModule := function(Mod,h,H)
+    if Type(H) ne GrpPC then
+        return GModule(H,[Representation(Mod)((H.j)@@h): j in [1..Ngens(H)]]);
+    else
+        return GModule(H,[Representation(Mod)((H.j)@@h): j in [1..NPCgens(H)]]);
+    end if;
+end function;
+
+// submodule of G-module Mod defined by basis Phi, assuming it is preserved by action
+SubGModule := function(Mod,Phi)
+    return GModule(Group(Mod),[Solution(Phi,Phi*ac):ac in ActionGenerators(Mod)]);
+end function;
+
+// quotient module of G-module Mod modulo  submodule defined by Phi
+QuoGModule := function(Mod,Phi)
+    PhiSection := Solution(Phi,IdentityMatrix(CoefficientRing(Mod),Rank(Phi)));
+    return GModule(Group(Mod),[PhiSection*ac*Phi:ac in ActionGenerators(Mod)]);
+end function;
+
+//representative of integer m in Z/n, allowing n=0
+Modulo :=  function(m,n)
+    return (n eq 0 select m else m mod n);
+end function;
+
+//reduce entries of matrix Phi according to moduli given
+ReduceMatrix := function(Phi, moduli)
+    return Matrix(Nrows(Phi),Ncols(Phi),[<m,n,Modulo(Z!Phi[m,n],Gcd(Z!moduli[Min(m,n)],Characteristic(BaseRing(Phi))))>
+                                    :m in [1..Nrows(Phi)], n in [1..Ncols(Phi)]]);
+end function;
+
+//test if f:C->D is homomorphism of cohomology modules
+IsGModuleHomomorphism := function(C,D,f)
+    if D`modtype eq 'GrpAb' then
+        invD := Invariants(D);
+        return Group(C) eq Group(D) and
+            &and[IsZero(ReduceMatrix(ChangeRing(MatrixOfElement(C,g),Z)*f-f*ChangeRing(MatrixOfElement(D,g),Z),invD)):g in Generators(Group(C))];
+    else
+        return Group(C) eq Group(D) and &and[IsZero(ChangeRing(MatrixOfElement(C,g),Ring(D))*f-f*MatrixOfElement(D,g)):g in Generators(Group(C))];
+    end if;
+end function;
+
+//restrict cohomology module CM to subgroup H (Magma code does not convert to larger group)
+MyRestriction := function(CM, H)
+  local G, mats, CMH, Res1, Res2;
+  G := Group(CM);
+  if CM`modtype eq 'GrpAb' then
+    if Type(H) eq GrpPC then
+        mats := [ MatrixOfElement(CM, G!H.i) : i in [1..NPCgens(H)] ];
+    else
+        mats := [ MatrixOfElement(CM, G!H.i) : i in [1..Ngens(H)] ];
+    end if;
+    CMH := CohomologyModule(H, CM`invar, mats);
+  else
+    CMH := CohomologyModule(H, Restriction (CM`module, H) );
+  end if;
+  return CMH;
+end function;
+
+//for C a cohomology module of G and H subgroup of G, the map $H1(G,C)->H1(H,C)$
+RestrictionMapH1 := function(C,H)
+    H1 := CohomologyGroup(C,1);
+    Cres := MyRestriction(C,H);
+    Hres := CohomologyGroup(Cres,1);
+    return Matrix([IdentifyOneCocycle(Cres, func<a|OneCocycle(C,b)(<Group(C)!a[1]>)>):b in Basis(H1)]);
+end function;
+
+//the map H1(C)->H1(D) induced by phi:C->D
+InducedMapH1 := function(C,D,phi)
+    images := [];
+    H1C := CohomologyGroup(C,1);
+    H1D := CohomologyGroup(D,1);
+    for b in Basis(H1C) do
+        s := OneCocycle(C,b);
+        s_ind := func<tup|MyModule(D)!Eltseq(s(tup)*phi)>;
+        Append(~images,IdentifyOneCocycle(D,s_ind));
+    end for;
+    fstar := Matrix(Z,Rank(H1C),Rank(H1D),images);
+    return fstar;
+end function;
+
+//the map H0(C)->H0(D) induced by phi
+InducedMapH0 := function(C,D,phi)
+    images := [];
+    H0C := CohomologyGroup(C,0);
+    H0D := CohomologyGroup(D,0);
+    for b in Basis(H0C) do
+        s := ZeroCocycle(C,b);
+        s_ind := func<tup|RSpace(BaseRing(MyModule(D)), Dimension(D))!Eltseq(s(tup)*phi)>;
+        Append(~images,IdentifyZeroCocycle(D,s_ind));
+    end for;
+    fstar := Matrix(Z,Rank(H0C),Rank(H0D),images);
+    return fstar;
+end function;
+
+//connecting map for short exact seq. f:B->C, g:C->D
+ConnectingMapH0H1 := function(B,C,D,f,g)
+    connecting_images := [];
+    G := Group(B);
+    H0D := CohomologyGroup(D,0);
+    H1B := CohomologyGroup(B,1);
+    for b in Basis(H0D) do
+     s := ZeroCocycle(D,b);
+     s_pull := func<tup|Solution(ChangeRing(g,Ring(C)),ChangeRing(s(tup),Ring(C)))>;
+     ds:=func<tup|s_pull(<>)*ChangeRing(MatrixOfElement(C,G!tup[1]),Ring(C))-s_pull(<>)>; // cannot use CoboundaryMapImage because bug
+     ds_res := func<tup|f(ds(tup))>;
+     Append(~connecting_images,IdentifyOneCocycle(B,ds_res));
+    end for;
+    delta := Matrix(Z,Rank(H0D),Rank(H1B),connecting_images);
+    return delta;
+end function;
+
+//converts Z-module V to abelian group.
+RSpaceToAbelian := function(V)
+    return AbelianGroup([Gcd(Z!x,Characteristic(BaseRing(V))) : x in Moduli(V)]);
+end function;
+
+//convert V into Z-module with right moduli
+FullRSpace := function(V)
+    try 
+        Vfull := RSpace(Z,[Gcd(Z!x,Characteristic(BaseRing(V))) : x in Moduli(V)]);
+    catch e
+        Vfull := RSpace(Z,[Characteristic(BaseRing(V)) : j in [1..Degree(V)]]);
+    end try;
+    return sub<Vfull|RowSequence(ChangeRing(BasisMatrix(V),Z))>;
+end function;
